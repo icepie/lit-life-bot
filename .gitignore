@@ -1,0 +1,9 @@
+.vscode/
+.env
+.idea
+asset
+*.bak
+
+go.sum
+lit-life-bot
+lit-life-bot.exe
