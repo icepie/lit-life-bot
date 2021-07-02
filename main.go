@@ -1,10 +1,14 @@
 package main
 
 import (
+	"lit-life-bot/client"
 	"lit-life-bot/config"
-	"log"
+	"lit-life-bot/model"
 )
 
 func main() {
-	log.Println(config.ProConf)
+	model.Database(config.DBMain)
+
+	client.OPQStart()
+
 }

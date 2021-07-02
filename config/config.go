@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"log"
 	"os"
 
@@ -10,13 +11,28 @@ import (
 var ProConf = new(Config)
 
 type Config struct {
-	OPQ OPQConfig
+	OPQ   OPQConfig
+	MySQL MySQLConfig
 }
 
 type OPQConfig struct {
 	Url string
 	QQ  int64
 }
+
+// MySQLConfig 关系数据库配置
+type MySQLConfig struct {
+	Host string
+	Port int
+	User string
+	PWD  string
+	DB   string
+}
+
+// 主地址配置
+var (
+	DBMain string
+)
 
 func init() {
 
@@ -38,5 +54,8 @@ func init() {
 	if err := viper.Unmarshal(ProConf); err != nil {
 		log.Fatalln(err)
 	}
+
+	// 拼接最终数据库连接地址
+	DBMain = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local", ProConf.MySQL.User, ProConf.MySQL.PWD, ProConf.MySQL.Host, ProConf.MySQL.Port, ProConf.MySQL.DB)
 
 }

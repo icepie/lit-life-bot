@@ -12,8 +12,9 @@ var (
 // User 用户模型
 type User struct {
 	gorm.Model
-	StuID          string `gorm:"unique"`
-	QQ             uint   `gorm:"unique"`
+	StuID          string
+	QQ             int64
+	Name           string
 	Identity       string
 	SecPassword    string
 	JWPassword     string

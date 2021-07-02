@@ -1,3 +1,10 @@
 opq:
-  url: 'http://xxx.xxx.xxx:8881'
+  url: ''
   qq: 1962847213
+
+mysql:
+  host: ''
+  port: 29117
+  user: 'root'
+  pwd: ''
+  db: 'lit'
