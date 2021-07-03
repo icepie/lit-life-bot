@@ -460,19 +460,44 @@ func handleGroupMsg(botQQ int64, packet *OPQBot.GroupMsgPack) {
 // 处理私聊消息
 func handleFriendMsg(botQQ int64, packet *OPQBot.FriendMsgPack) {
 
-	// 排除机器人自己
-	if packet.FromUin == botQQ {
-		return
-	}
-
 	s := OPQ.Session.SessionStart(packet.FromUin)
 
 	status, _ := s.GetString("status")
 	stopTime, _ := s.GetInt("stop_time")
 
+	// 排除机器人自己
+	if packet.FromUin == botQQ {
+		return
+	}
+
+	members, err := OPQ.GetGroupMemberList(647027400, 0)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	isInGroup := false
+	// 验证是否为群内人员
+	for _, eachItem := range members.MemberList {
+		if eachItem.MemberUin == packet.FromUin {
+			isInGroup = true
+			break
+		}
+	}
+
+	if !isInGroup && status != "ban" {
+		OPQ.Send(OPQBot.SendMsgPack{
+			SendToType: OPQBot.SendToTypeFriend,
+			ToUserUid:  packet.FromUin,
+			Content:    OPQBot.SendTypeTextMsgContent{Content: "您无权使用洛洛, 请加群(oh-my-lit)后重试!"},
+		})
+		s.Set("status", "ban")
+		return
+	}
+
 	// 查找用户
 	var user model.User
-	err := model.DB.Where("qq = ?", packet.FromUin).First(&user).Error
+	err = model.DB.Where("qq = ?", packet.FromUin).First(&user).Error
 	if err != nil {
 		log.Println(err)
 	}
