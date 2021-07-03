@@ -3,11 +3,13 @@ package client
 import (
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"lit-life-bot/config"
 	"lit-life-bot/model"
 	"log"
 
 	"github.com/icepie/oh-my-lit/client/sec"
+	"github.com/icepie/oh-my-lit/client/zhyd"
 	"github.com/mcoo/OPQBot"
 	"github.com/mcoo/OPQBot/session"
 )
@@ -17,7 +19,7 @@ var (
 )
 
 // 用户绑定智慧门户
-func bindLitSec(s session.Session, packet *OPQBot.FriendMsgPack) error {
+func UserBindLitSec(s session.Session, packet *OPQBot.FriendMsgPack) error {
 
 	step, _ := s.GetString("step")
 
@@ -305,6 +307,151 @@ func bindLitSec(s session.Session, packet *OPQBot.FriendMsgPack) error {
 
 }
 
+// 用户使用 智慧用电相关
+func UserZhyd(user model.User, s session.Session, packet *OPQBot.FriendMsgPack) {
+
+	zhydUser, err := zhyd.NewZhydUser(user.StuID, user.SecPassword)
+	if err != nil {
+		log.Println("实例化用户失败: ", err)
+		OPQ.Send(OPQBot.SendMsgPack{
+			SendToType: OPQBot.SendToTypeFriend,
+			ToUserUid:  packet.FromUin,
+			Content:    OPQBot.SendTypeTextMsgContent{Content: "错误(请及时反馈): " + err.Error()},
+		})
+		return
+	}
+
+	b, err := zhydUser.IsNeedCaptcha()
+	if err != nil {
+		log.Println("获取用户信息失败: ", err)
+		OPQ.Send(OPQBot.SendMsgPack{
+			SendToType: OPQBot.SendToTypeFriend,
+			ToUserUid:  packet.FromUin,
+			Content:    OPQBot.SendTypeTextMsgContent{Content: "错误(请及时反馈): " + err.Error()},
+		})
+		return
+	}
+
+	if b {
+		// log.Println("需要验证码")
+		// pix, err := zhydUser.GetCaptche()
+		// if err != nil {
+		log.Println("获取验证码失败: ", err)
+		OPQ.Send(OPQBot.SendMsgPack{
+			SendToType: OPQBot.SendToTypeFriend,
+			ToUserUid:  packet.FromUin,
+			Content:    OPQBot.SendTypeTextMsgContent{Content: "未知错误(请及时反馈)"},
+		})
+		return
+
+	} else {
+		err = zhydUser.Login()
+		if err != nil {
+			log.Println("获取验证码状态失败: ", err)
+			OPQ.Send(OPQBot.SendMsgPack{
+				SendToType: OPQBot.SendToTypeFriend,
+				ToUserUid:  packet.FromUin,
+				Content:    OPQBot.SendTypeTextMsgContent{Content: "未知错误(请及时反馈)"},
+			})
+			return
+		}
+
+		isLogged, err := zhydUser.IsLogged()
+		if isLogged {
+
+			if packet.Content == "/宿舍用电" {
+				de, err := zhydUser.GetDormElectricity()
+				if err != nil {
+					log.Println("获取余电额度失败: ", err)
+					OPQ.Send(OPQBot.SendMsgPack{
+						SendToType: OPQBot.SendToTypeFriend,
+						ToUserUid:  packet.FromUin,
+						Content:    OPQBot.SendTypeTextMsgContent{Content: "错误(请及时反馈): " + err.Error()},
+					})
+					return
+				}
+
+				deStr := fmt.Sprintf("宿舍用电: \n\t\t宿舍楼: %s \n\t\t房间: %s \n\t\t余电: %v 度 \n\t\t余额: %v 元", de.BuildName, de.Room, de.Electricity, de.Balance)
+
+				// todo
+
+				OPQ.Send(OPQBot.SendMsgPack{
+					SendToType: OPQBot.SendToTypeFriend,
+					ToUserUid:  packet.FromUin,
+					Content:    OPQBot.SendTypeTextMsgContent{Content: deStr},
+				})
+
+				return
+			} else if packet.Content == "/历史用电" {
+
+				ed, err := zhydUser.GetElectricityDetails()
+				if err != nil {
+					log.Println("获取历史用电失败: ", err)
+					OPQ.Send(OPQBot.SendMsgPack{
+						SendToType: OPQBot.SendToTypeFriend,
+						ToUserUid:  packet.FromUin,
+						Content:    OPQBot.SendTypeTextMsgContent{Content: "错误(请及时反馈): " + err.Error()},
+					})
+				}
+
+				edStr := "历史用电:\n"
+
+				for _, v := range ed.Details {
+					edStr += "\t" + v.Time.Format("2006-01-02") + ": " + fmt.Sprint(v.Value) + " 度\n"
+				}
+
+				OPQ.Send(OPQBot.SendMsgPack{
+					SendToType: OPQBot.SendToTypeFriend,
+					ToUserUid:  packet.FromUin,
+					Content:    OPQBot.SendTypeTextMsgContent{Content: edStr},
+				})
+
+				return
+
+			} else if packet.Content == "/充电记录" {
+
+				// log.Println(ed)
+
+				cr, err := zhydUser.GetChargeRecords()
+				if err != nil {
+					log.Println("获取充值记录失败: ", err)
+					OPQ.Send(OPQBot.SendMsgPack{
+						SendToType: OPQBot.SendToTypeFriend,
+						ToUserUid:  packet.FromUin,
+						Content:    OPQBot.SendTypeTextMsgContent{Content: "错误(请及时反馈): " + err.Error()},
+					})
+					return
+				}
+
+				crStr := "充电记录:\n"
+
+				for _, v := range cr.Mx {
+					crStr += "\t" + v.Accounttime.Time.Format("2006-01-02") + ": " + v.Inmoney + "元\n"
+				}
+
+				OPQ.Send(OPQBot.SendMsgPack{
+					SendToType: OPQBot.SendToTypeFriend,
+					ToUserUid:  packet.FromUin,
+					Content:    OPQBot.SendTypeTextMsgContent{Content: crStr},
+				})
+
+				return
+
+			} else {
+
+				log.Println("似乎未登陆: ", err)
+				OPQ.Send(OPQBot.SendMsgPack{
+					SendToType: OPQBot.SendToTypeFriend,
+					ToUserUid:  packet.FromUin,
+					Content:    OPQBot.SendTypeTextMsgContent{Content: "未知错误(请及时反馈)"},
+				})
+
+				return
+			}
+		}
+	}
+}
+
 // 处理群消息
 func handleGroupMsg(botQQ int64, packet *OPQBot.GroupMsgPack) {
 	packet.Next(botQQ, packet)
@@ -313,15 +460,22 @@ func handleGroupMsg(botQQ int64, packet *OPQBot.GroupMsgPack) {
 // 处理私聊消息
 func handleFriendMsg(botQQ int64, packet *OPQBot.FriendMsgPack) {
 
-	// 查找用户
-	var user model.User
-	count := 0
-	model.DB.First(&user, packet.FromUin).Count(&count)
+	// 排除机器人自己
+	if packet.FromUin == botQQ {
+		return
+	}
 
 	s := OPQ.Session.SessionStart(packet.FromUin)
 
 	status, _ := s.GetString("status")
 	stopTime, _ := s.GetInt("stop_time")
+
+	// 查找用户
+	var user model.User
+	err := model.DB.Where("qq = ?", packet.FromUin).First(&user).Error
+	if err != nil {
+		log.Println(err)
+	}
 
 	// 无条件暂停
 	if (packet.Content == "/停止" && status != "") || stopTime >= 2 {
@@ -335,14 +489,32 @@ func handleFriendMsg(botQQ int64, packet *OPQBot.FriendMsgPack) {
 
 	}
 
+	if packet.Content == "/菜单" {
+
+		content := "基础功能: \n\t/绑定 - 绑定智慧门户帐号 \n\t/状态 - 查看绑定状态 \n\t/解绑 - 彻底解除绑定 \n\n智慧控电: \n\t/宿舍用电 - 查询当前宿舍剩余用电 \n\t/历史用电 - 查询宿舍历史用电情况 \n\t /充电记录 - 查询宿舍电量充值记录"
+
+		OPQ.Send(OPQBot.SendMsgPack{
+			SendToType: OPQBot.SendToTypeFriend,
+			ToUserUid:  packet.FromUin,
+			Content:    OPQBot.SendTypeTextMsgContent{Content: content},
+		})
+
+		return
+	}
+
+	// 绑定状态
+	if status == "binding" {
+		UserBindLitSec(s, packet)
+	}
+
 	// 判断用户状态
 	if status == "" {
 
 		if packet.Content == "/绑定" {
-			if count == 0 {
+			if user.QQ == 0 {
 				s.Set("status", "binding")
 				s.Set("step", "init")
-				err := bindLitSec(s, packet)
+				err := UserBindLitSec(s, packet)
 				if err != nil {
 					s.Delete("status")
 					s.Delete("step")
@@ -355,16 +527,56 @@ func handleFriendMsg(botQQ int64, packet *OPQBot.FriendMsgPack) {
 				OPQ.Send(OPQBot.SendMsgPack{
 					SendToType: OPQBot.SendToTypeFriend,
 					ToUserUid:  packet.FromUin,
-					Content:    OPQBot.SendTypeTextMsgContent{Content: "您已绑定学号" + user.StuID + "! \n\n 如需解除绑定, 请输入 /解绑!"},
+					Content:    OPQBot.SendTypeTextMsgContent{Content: "您已绑定学号: " + user.StuID + " ! \n\n如需解除绑定, 请输入 /解绑 !"},
 				})
 			}
-
+			return
 		}
-	}
 
-	// 绑定状态
-	if status == "binding" {
-		bindLitSec(s, packet)
+		// 未绑定的情况
+		if user.QQ == 0 {
+
+			OPQ.Send(OPQBot.SendMsgPack{
+				SendToType: OPQBot.SendToTypeFriend,
+				ToUserUid:  packet.FromUin,
+				Content:    OPQBot.SendTypeTextMsgContent{Content: "您未绑定任何学号! \n\n如需进行绑定操作, 请输入 /绑定 !"},
+			})
+
+			return
+
+		} else {
+			if packet.Content == "/解绑" {
+
+				err := model.DB.Delete(&user).Error
+				if err != nil {
+					OPQ.Send(OPQBot.SendMsgPack{
+						SendToType: OPQBot.SendToTypeFriend,
+						ToUserUid:  packet.FromUin,
+						Content:    OPQBot.SendTypeTextMsgContent{Content: "错误(请及时反馈): " + err.Error()},
+					})
+					return
+				}
+
+				OPQ.Send(OPQBot.SendMsgPack{
+					SendToType: OPQBot.SendToTypeFriend,
+					ToUserUid:  packet.FromUin,
+					Content:    OPQBot.SendTypeTextMsgContent{Content: "解除绑定成功! 洛洛会想你的 :( "},
+				})
+
+			} else if packet.Content == "/状态" {
+
+				content := fmt.Sprintf("姓名: %s \n学号: %s \n智慧门户: 已绑定", user.Name, user.StuID)
+
+				OPQ.Send(OPQBot.SendMsgPack{
+					SendToType: OPQBot.SendToTypeFriend,
+					ToUserUid:  packet.FromUin,
+					Content:    OPQBot.SendTypeTextMsgContent{Content: content},
+				})
+
+			} else if packet.Content == "/宿舍用电" || packet.Content == "/历史用电" || packet.Content == "/充电记录" {
+				UserZhyd(user, s, packet)
+			}
+		}
 	}
 
 	log.Println(packet.FromUin, " -> ", packet.Content)
