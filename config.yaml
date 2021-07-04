@@ -8,3 +8,5 @@ mysql:
   user: 'root'
   pwd: ''
   db: 'lit'
+
+qqGroup: 111

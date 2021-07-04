@@ -18,7 +18,8 @@ import (
 )
 
 var (
-	OPQ OPQBot.BotManager
+	OPQ           OPQBot.BotManager
+	MemberUinList []int64
 )
 
 // 用户绑定智慧门户
@@ -546,30 +547,24 @@ func handleFriendMsg(botQQ int64, packet *OPQBot.FriendMsgPack) {
 		return
 	}
 
-	// members, err := OPQ.GetGroupMemberList(647027400, 0)
-	// if err != nil {
-	// 	log.Println(err)
-	// 	return
-	// }
+	isInGroup := false
+	// 验证是否为群内人员
+	for _, v := range MemberUinList {
+		if v == packet.FromUin {
+			isInGroup = true
+			break
+		}
+	}
 
-	// isInGroup := false
-	// // 验证是否为群内人员
-	// for _, eachItem := range members.MemberList {
-	// 	if eachItem.MemberUin == packet.FromUin {
-	// 		isInGroup = true
-	// 		break
-	// 	}
-	// }
-
-	// if !isInGroup && status != "ban" {
-	// 	OPQ.Send(OPQBot.SendMsgPack{
-	// 		SendToType: OPQBot.SendToTypeFriend,
-	// 		ToUserUid:  packet.FromUin,
-	// 		Content:    OPQBot.SendTypeTextMsgContent{Content: "您无权使用洛洛, 请加群(oh-my-lit)后重试!"},
-	// 	})
-	// 	s.Set("status", "ban")
-	// 	return
-	// }
+	if !isInGroup {
+		OPQ.Send(OPQBot.SendMsgPack{
+			SendToType: OPQBot.SendToTypeFriend,
+			ToUserUid:  packet.FromUin,
+			Content:    OPQBot.SendTypeTextMsgContent{Content: "您无权使用洛洛, 请加入群(oh-my-lit)后重试!"},
+		})
+		s.Delete("status")
+		return
+	}
 
 	// 查找用户
 	var user model.User
@@ -714,40 +709,106 @@ func OPQStart() {
 		log.Println(err.Error())
 	}
 	err = OPQ.AddEvent(OPQBot.EventNameOnConnected, func() {
+
 		log.Println("连接成功！！！")
+
+		var tmpUin int64
+
+		for {
+			gi, err := OPQ.GetGroupMemberList(config.ProConf.QQGroup, tmpUin)
+			if err != nil {
+				log.Println(err)
+			} else {
+				for _, v := range gi.MemberList {
+					MemberUinList = append(MemberUinList, v.MemberUin)
+				}
+
+			}
+
+			if len(gi.MemberList) == 250 {
+				tmpUin = gi.MemberList[249].MemberUin
+			} else {
+				break
+			}
+
+		}
+
+		// if len(GroupInfo.MemberList) != 0 {
+		// 	break
+		// }
+
+		log.Println("更新群 (", config.ProConf.QQGroup, ") 资料成功! 当前人数", len(MemberUinList))
+
 	})
 	if err != nil {
 		log.Println(err.Error())
 	}
 	err = OPQ.AddEvent(OPQBot.EventNameOnDisconnected, func() {
+		log.Println(err)
 		log.Println("连接断开！！")
 	})
 	if err != nil {
 		log.Println(err.Error())
 	}
 	err = OPQ.AddEvent(OPQBot.EventNameOnOther, func(botQQ int64, e interface{}) {
-		log.Println(err)
+		log.Println(e)
 	})
 	err = OPQ.AddEvent(OPQBot.EventNameOnGroupSystemNotify, func(botQQ int64, e *OPQBot.GroupSystemNotifyPack) {
-		log.Println(err)
+		log.Println(e)
 	})
 	err = OPQ.AddEvent(OPQBot.EventNameOnGroupRevoke, func(botQQ int64, e *OPQBot.GroupRevokePack) {
-		log.Println(err)
+		log.Println(e)
 	})
 	err = OPQ.AddEvent(OPQBot.EventNameOnGroupJoin, func(botQQ int64, e *OPQBot.GroupJoinPack) {
-		log.Println(err)
+
+		log.Println(e)
+
+		log.Println(e.EventMsg)
+		log.Println(e.EventData)
+
+		log.Println("加群事件:", e.EventMsg.FromUin, e.EventData.UserID)
+
+		if e.EventMsg.FromUin == config.ProConf.QQGroup {
+			MemberUinList = append(MemberUinList, e.EventData.UserID)
+			log.Println("已授予权限!")
+		}
+
 	})
 	err = OPQ.AddEvent(OPQBot.EventNameOnGroupAdmin, func(botQQ int64, e *OPQBot.GroupAdminPack) {
-		log.Println(err)
+		log.Println(e)
+		log.Println(e.EventMsg)
+		log.Println(e.EventData)
 	})
 	err = OPQ.AddEvent(OPQBot.EventNameOnGroupExit, func(botQQ int64, e *OPQBot.GroupExitPack) {
-		log.Println(err)
+		log.Println(e)
+
+		log.Println(e.EventMsg)
+		log.Println(e.EventData)
+
+		log.Println("退群事件:", e.EventMsg.FromUin, e.EventData.UserID)
+
+		if e.EventMsg.FromUin == config.ProConf.QQGroup {
+
+			for i, v := range MemberUinList {
+				if v == e.EventData.UserID {
+					MemberUinList = append(MemberUinList[:i], MemberUinList[i+1:]...)
+					break
+				}
+			}
+
+			log.Println("已移除权限!")
+		}
+
+		log.Println(e.EventMsg)
+		log.Println(e.EventData)
 	})
 	err = OPQ.AddEvent(OPQBot.EventNameOnGroupExitSuccess, func(botQQ int64, e *OPQBot.GroupExitSuccessPack) {
-		log.Println(err)
+		log.Println(e)
+		log.Println(e.EventMsg)
+		log.Println(e.EventData)
 	})
 	err = OPQ.AddEvent(OPQBot.EventNameOnGroupAdminSysNotify, func(botQQ int64, e *OPQBot.GroupAdminSysNotifyPack) {
-		log.Println(err)
+		log.Println(e)
 	})
 	if err != nil {
 		log.Println(err.Error())

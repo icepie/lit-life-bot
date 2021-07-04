@@ -11,8 +11,9 @@ import (
 var ProConf = new(Config)
 
 type Config struct {
-	OPQ   OPQConfig
-	MySQL MySQLConfig
+	OPQ     OPQConfig
+	MySQL   MySQLConfig
+	QQGroup int64
 }
 
 type OPQConfig struct {
