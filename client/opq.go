@@ -443,10 +443,10 @@ func UserZhyd(user model.User, s session.Session, packet *OPQBot.FriendMsgPack) 
 						})
 					}
 				} else {
-					var edTimes []time.Time
-					var edValues []float64
 
 					for _, ed := range eds {
+						var edTimes []time.Time
+						var edValues []float64
 						for _, v := range ed.Details {
 							edTimes = append(edTimes, v.Time)
 							edValues = append(edValues, v.Value)
