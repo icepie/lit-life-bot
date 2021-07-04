@@ -390,7 +390,7 @@ func UserZhyd(user model.User, s session.Session, packet *OPQBot.FriendMsgPack) 
 		if isLogged {
 
 			if packet.Content == "/宿舍用电" {
-				de, err := zhydUser.GetDormElectricity()
+				des, err := zhydUser.GetDormElectricity()
 				if err != nil {
 					log.Println("获取余电额度失败: ", err)
 					OPQ.Send(OPQBot.SendMsgPack{
@@ -401,20 +401,23 @@ func UserZhyd(user model.User, s session.Session, packet *OPQBot.FriendMsgPack) 
 					return
 				}
 
-				deStr := fmt.Sprintf("宿舍用电: \n\t\t宿舍楼: %s \n\t\t房间: %s \n\t\t余电: %v 度 \n\t\t余额: %v 元", de.BuildName, de.Room, de.Electricity, de.Balance)
+				for _, de := range des {
+					deStr := fmt.Sprintf("宿舍用电(%s): \n\t\t宿舍楼: %s \n\t\t房间: %s \n\t\t余电: %v 度 \n\t\t余额: %v 元", de.Name, de.BuildName, de.Room, de.Electricity, de.Balance)
 
-				// todo
+					// todo
 
-				OPQ.Send(OPQBot.SendMsgPack{
-					SendToType: OPQBot.SendToTypeFriend,
-					ToUserUid:  packet.FromUin,
-					Content:    OPQBot.SendTypeTextMsgContent{Content: deStr},
-				})
+					OPQ.Send(OPQBot.SendMsgPack{
+						SendToType: OPQBot.SendToTypeFriend,
+						ToUserUid:  packet.FromUin,
+						Content:    OPQBot.SendTypeTextMsgContent{Content: deStr},
+					})
+
+				}
 
 				return
 			} else if packet.Content == "/历史用电" || packet.Content == "/历史用电折线图" {
 
-				ed, err := zhydUser.GetElectricityDetails()
+				eds, err := zhydUser.GetElectricityDetails()
 				if err != nil {
 					log.Println("获取历史用电失败: ", err)
 					OPQ.Send(OPQBot.SendMsgPack{
@@ -425,62 +428,64 @@ func UserZhyd(user model.User, s session.Session, packet *OPQBot.FriendMsgPack) 
 				}
 
 				if packet.Content == "/历史用电" {
-					edStr := "历史用电:\n"
+					for _, ed := range eds {
+						edStr := fmt.Sprintf("历史用电(%s):\n", ed.Name)
 
-					for _, v := range ed.Details {
-						edStr += "\t" + v.Time.Format("2006-01-02") + ": " + fmt.Sprint(v.Value) + " 度\n"
+						for _, v := range ed.Details {
+							edStr += "\t" + v.Time.Format("2006-01-02") + ": " + fmt.Sprint(v.Value) + " 度\n"
+						}
+
+						OPQ.Send(OPQBot.SendMsgPack{
+							SendToType: OPQBot.SendToTypeFriend,
+							ToUserUid:  packet.FromUin,
+							Content:    OPQBot.SendTypeTextMsgContent{Content: edStr},
+						})
 					}
-
-					OPQ.Send(OPQBot.SendMsgPack{
-						SendToType: OPQBot.SendToTypeFriend,
-						ToUserUid:  packet.FromUin,
-						Content:    OPQBot.SendTypeTextMsgContent{Content: edStr},
-					})
 				} else {
 					var edTimes []time.Time
 					var edValues []float64
 
-					for _, v := range ed.Details {
-						edTimes = append(edTimes, v.Time)
-						edValues = append(edValues, v.Value)
-					}
+					for _, ed := range eds {
+						for _, v := range ed.Details {
+							edTimes = append(edTimes, v.Time)
+							edValues = append(edValues, v.Value)
+						}
 
-					graph := chart.Chart{
-						Title:      "Daily electricity consumption statistics chart" + "(Nearly " + fmt.Sprint(len(edTimes)) + " days)",
-						TitleStyle: chart.Style{FontSize: 8},
-						XAxis: chart.XAxis{
-							Name:           "Time",
-							ValueFormatter: chart.TimeHourValueFormatter,
-						},
-						YAxis: chart.YAxis{
-							Name: "kW·h",
-						},
-						Series: []chart.Series{
-							chart.TimeSeries{
-								XValues: edTimes,
-								YValues: edValues,
+						graph := chart.Chart{
+							Title:      "Daily electricity consumption statistics chart" + "(Nearly " + fmt.Sprint(len(edTimes)) + " days)",
+							TitleStyle: chart.Style{FontSize: 8},
+							XAxis: chart.XAxis{
+								Name:           "Date",
+								ValueFormatter: chart.TimeHourValueFormatter,
 							},
-						},
+							YAxis: chart.YAxis{
+								Name: "kW·h",
+							},
+							Series: []chart.Series{
+								chart.TimeSeries{
+									XValues: edTimes,
+									YValues: edValues,
+								},
+							},
+						}
+
+						b := bytes.NewBuffer([]byte{})
+						graph.Render(chart.PNG, b) //where graph is my chart.Chart{...}
+						byteArray := b.Bytes()
+
+						OPQ.Send(OPQBot.SendMsgPack{
+							SendToType: OPQBot.SendToTypeFriend,
+							ToUserUid:  packet.FromUin,
+							Content:    OPQBot.SendTypePicMsgByBase64Content{Content: "近" + fmt.Sprint(len(edTimes)) + "天每日用电量统计图(" + ed.Name + ")", Base64: base64.StdEncoding.EncodeToString(byteArray)},
+						})
 					}
-
-					b := bytes.NewBuffer([]byte{})
-					graph.Render(chart.PNG, b) //where graph is my chart.Chart{...}
-					byteArray := b.Bytes()
-
-					OPQ.Send(OPQBot.SendMsgPack{
-						SendToType: OPQBot.SendToTypeFriend,
-						ToUserUid:  packet.FromUin,
-						Content:    OPQBot.SendTypePicMsgByBase64Content{Content: "近" + fmt.Sprint(len(edTimes)) + "天每日用电量统计图", Base64: base64.StdEncoding.EncodeToString(byteArray)},
-					})
 				}
 
 				return
 
 			} else if packet.Content == "/充电记录" {
 
-				// log.Println(ed)
-
-				cr, err := zhydUser.GetChargeRecords()
+				crs, err := zhydUser.GetChargeRecords()
 				if err != nil {
 					log.Println("获取充值记录失败: ", err)
 					OPQ.Send(OPQBot.SendMsgPack{
@@ -491,17 +496,20 @@ func UserZhyd(user model.User, s session.Session, packet *OPQBot.FriendMsgPack) 
 					return
 				}
 
-				crStr := "充电记录:\n"
+				for _, cr := range crs {
+					crStr := fmt.Sprintf("充电记录(%s):\n", cr.Device)
 
-				for _, v := range cr.Mx {
-					crStr += "\t" + v.Accounttime.Time.Format("2006-01-02") + ": " + v.Inmoney + " 元\n"
+					for _, v := range cr.Mx {
+						crStr += "\t" + v.Accounttime.Time.Format("2006-01-02") + ": " + v.Inmoney + " 元\n"
+					}
+
+					OPQ.Send(OPQBot.SendMsgPack{
+						SendToType: OPQBot.SendToTypeFriend,
+						ToUserUid:  packet.FromUin,
+						Content:    OPQBot.SendTypeTextMsgContent{Content: crStr},
+					})
+
 				}
-
-				OPQ.Send(OPQBot.SendMsgPack{
-					SendToType: OPQBot.SendToTypeFriend,
-					ToUserUid:  packet.FromUin,
-					Content:    OPQBot.SendTypeTextMsgContent{Content: crStr},
-				})
 
 				return
 
