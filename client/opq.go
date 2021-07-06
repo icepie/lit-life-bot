@@ -8,6 +8,7 @@ import (
 	"lit-life-bot/config"
 	"lit-life-bot/model"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/icepie/oh-my-lit/client/sec"
@@ -531,6 +532,9 @@ func UserZhyd(user model.User, s session.Session, packet *OPQBot.FriendMsgPack) 
 
 // 用户一卡通相关
 func UserOneCard(user model.User, s session.Session, packet *OPQBot.FriendMsgPack) {
+
+	status, _ := s.GetString("status")
+
 	if packet.Content == "/一卡通" {
 
 		OPQ.Send(OPQBot.SendMsgPack{
@@ -561,37 +565,293 @@ func UserOneCard(user model.User, s session.Session, packet *OPQBot.FriendMsgPac
 			Content:    OPQBot.SendTypeTextMsgContent{Content: rteContent},
 		})
 
-	} // else if packet.Content == "/充卡记录" {
-	// 	OPQ.Send(OPQBot.SendMsgPack{
-	// 		SendToType: OPQBot.SendToTypeFriend,
-	// 		ToUserUid:  packet.FromUin,
-	// 		Content:    OPQBot.SendTypeTextMsgContent{Content: "正在查询...请稍后!"},
-	// 	})
+	} else if packet.Content == "/充卡记录" || status == "GetOneCardChargeRecords" {
 
-	// 	rte, err := MySecUser.GetOneCardChargeRecords(user.StuID, 1, 200)
-	// 	if err != nil {
-	// 		log.Println("查询一卡通消费记录失败: ", err)
+		maxPageSize := 30
 
-	// 		OPQ.Send(OPQBot.SendMsgPack{
-	// 			SendToType: OPQBot.SendToTypeFriend,
-	// 			ToUserUid:  packet.FromUin,
-	// 			Content:    OPQBot.SendTypeTextMsgContent{Content: "错误(请及时反馈): " + err.Error()},
-	// 		})
+		if status != "GetOneCardChargeRecords" {
 
-	// 		return
-	// 	}
+			OPQ.Send(OPQBot.SendMsgPack{
+				SendToType: OPQBot.SendToTypeFriend,
+				ToUserUid:  packet.FromUin,
+				Content:    OPQBot.SendTypeTextMsgContent{Content: "正在查询...请稍后!"},
+			})
 
-	// 	for i, v := range rte.Obj {
-	// 		v.
-	// 	}
+			rte, err := MySecUser.GetOneCardChargeRecords(user.StuID, 1, uint(maxPageSize))
+			if err != nil {
+				log.Println("查询一卡通充值记录失败: ", err)
 
-	// 	OPQ.Send(OPQBot.SendMsgPack{
-	// 		SendToType: OPQBot.SendToTypeFriend,
-	// 		ToUserUid:  packet.FromUin,
-	// 		Content:    OPQBot.SendTypeTextMsgContent{Content: rteContent},
-	// 	})
+				OPQ.Send(OPQBot.SendMsgPack{
+					SendToType: OPQBot.SendToTypeFriend,
+					ToUserUid:  packet.FromUin,
+					Content:    OPQBot.SendTypeTextMsgContent{Content: "错误(请及时反馈): " + err.Error()},
+				})
 
-	// }
+				return
+			}
+
+			if rte.Count > int64(maxPageSize) {
+				lastRte, err := MySecUser.GetOneCardChargeRecords(user.StuID, 1, uint(rte.Count))
+				if err != nil {
+					log.Println("查询一卡通消费记录失败: ", err)
+
+					OPQ.Send(OPQBot.SendMsgPack{
+						SendToType: OPQBot.SendToTypeFriend,
+						ToUserUid:  packet.FromUin,
+						Content:    OPQBot.SendTypeTextMsgContent{Content: "错误(请及时反馈): " + err.Error()},
+					})
+
+					return
+				}
+
+				s.Set("status", "GetOneCardChargeRecords")
+				s.Set("OneCardChargeRecords", lastRte)
+
+				rteContent := "一卡通充值记录: \n"
+
+				for _, v := range lastRte.Obj[0:maxPageSize] {
+					rteContent = rteContent + "\t" + v.GeneraCardRechargeRecordTransactionTime + ": " + v.GeneraCardRechargeRecordTransactionAdress + " " + v.GeneraCardRechargeRecordTransactionType + " " + v.GeneraCardRechargeRecordTransactionBalance + " 元\n"
+				}
+
+				OPQ.Send(OPQBot.SendMsgPack{
+					SendToType: OPQBot.SendToTypeFriend,
+					ToUserUid:  packet.FromUin,
+					Content:    OPQBot.SendTypeTextMsgContent{Content: rteContent},
+				})
+
+				s.Set("pageindex", maxPageSize)
+
+				OPQ.Send(OPQBot.SendMsgPack{
+					SendToType: OPQBot.SendToTypeFriend,
+					ToUserUid:  packet.FromUin,
+					Content:    OPQBot.SendTypeTextMsgContent{Content: "如需要查看更多记录, 请发送 /下一页 或发送其他任意消息停止本次操作!"},
+				})
+
+			} else {
+				rteContent := "一卡通充值记录: \n"
+
+				for _, v := range rte.Obj {
+					rteContent = rteContent + "\t" + v.GeneraCardRechargeRecordTransactionTime + ": " + v.GeneraCardRechargeRecordTransactionAdress + " " + v.GeneraCardRechargeRecordTransactionType + " " + v.GeneraCardRechargeRecordTransactionBalance + " 元\n"
+				}
+
+				OPQ.Send(OPQBot.SendMsgPack{
+					SendToType: OPQBot.SendToTypeFriend,
+					ToUserUid:  packet.FromUin,
+					Content:    OPQBot.SendTypeTextMsgContent{Content: rteContent},
+				})
+			}
+
+		} else {
+
+			if packet.Content != "/下一页" {
+				OPQ.Send(OPQBot.SendMsgPack{
+					SendToType: OPQBot.SendToTypeFriend,
+					ToUserUid:  packet.FromUin,
+					Content:    OPQBot.SendTypeTextMsgContent{Content: "已结束本次操作~"},
+				})
+
+				s.Delete("status")
+				s.Delete("OneCardChargeRecords")
+				s.Delete("pageindex")
+
+			}
+
+			lastRteIf, _ := s.Get("OneCardChargeRecords")
+
+			lastRte, ok := lastRteIf.(sec.GetOneCardChargeRecordsRte)
+			if !ok {
+				return
+			}
+
+			index, _ := s.GetInt("pageindex")
+
+			rteContent := "一卡通消费记录: \n"
+
+			if index+maxPageSize > len(lastRte.Obj) {
+
+				for _, v := range lastRte.Obj[index : len(lastRte.Obj)-1] {
+					rteContent = rteContent + "\t" + v.GeneraCardRechargeRecordTransactionTime + ": " + v.GeneraCardRechargeRecordTransactionAdress + " " + v.GeneraCardRechargeRecordTransactionType + " " + v.GeneraCardRechargeRecordTransactionBalance + " 元\n"
+				}
+
+				OPQ.Send(OPQBot.SendMsgPack{
+					SendToType: OPQBot.SendToTypeFriend,
+					ToUserUid:  packet.FromUin,
+					Content:    OPQBot.SendTypeTextMsgContent{Content: rteContent},
+				})
+
+				OPQ.Send(OPQBot.SendMsgPack{
+					SendToType: OPQBot.SendToTypeFriend,
+					ToUserUid:  packet.FromUin,
+					Content:    OPQBot.SendTypeTextMsgContent{Content: "已无更多结果了哦~"},
+				})
+
+				s.Delete("status")
+				s.Delete("OneCardChargeRecords")
+				s.Delete("pageindex")
+
+				return
+			}
+
+			for _, v := range lastRte.Obj[index : index+maxPageSize] {
+				rteContent = rteContent + "\t" + v.GeneraCardRechargeRecordTransactionTime + ": " + v.GeneraCardRechargeRecordTransactionAdress + " " + v.GeneraCardRechargeRecordTransactionType + " " + v.GeneraCardRechargeRecordTransactionBalance + " 元\n"
+
+				OPQ.Send(OPQBot.SendMsgPack{
+					SendToType: OPQBot.SendToTypeFriend,
+					ToUserUid:  packet.FromUin,
+					Content:    OPQBot.SendTypeTextMsgContent{Content: rteContent},
+				})
+
+				s.Set("pageindex", maxPageSize+index)
+
+			}
+
+			return
+		}
+
+	} else if packet.Content == "/一卡通消费记录" || status == "GetOneCardConsumeRecords" {
+
+		maxPageSize := 30
+
+		if status != "GetOneCardConsumeRecords" {
+
+			OPQ.Send(OPQBot.SendMsgPack{
+				SendToType: OPQBot.SendToTypeFriend,
+				ToUserUid:  packet.FromUin,
+				Content:    OPQBot.SendTypeTextMsgContent{Content: "正在查询...请稍后!"},
+			})
+
+			rte, err := MySecUser.GetOneCardConsumeRecords(user.StuID, 1, uint(maxPageSize))
+			if err != nil {
+				log.Println("查询一卡通消费记录失败: ", err)
+
+				OPQ.Send(OPQBot.SendMsgPack{
+					SendToType: OPQBot.SendToTypeFriend,
+					ToUserUid:  packet.FromUin,
+					Content:    OPQBot.SendTypeTextMsgContent{Content: "错误(请及时反馈): " + err.Error()},
+				})
+
+				return
+			}
+
+			if rte.Count > int64(maxPageSize) {
+				lastRte, err := MySecUser.GetOneCardConsumeRecords(user.StuID, 1, uint(rte.Count))
+				if err != nil {
+					log.Println("查询一卡通消费记录失败: ", err)
+
+					OPQ.Send(OPQBot.SendMsgPack{
+						SendToType: OPQBot.SendToTypeFriend,
+						ToUserUid:  packet.FromUin,
+						Content:    OPQBot.SendTypeTextMsgContent{Content: "错误(请及时反馈): " + err.Error()},
+					})
+
+					return
+				}
+
+				s.Set("status", "GetOneCardConsumeRecords")
+				s.Set("OneCardConsumeRecords", lastRte)
+
+				rteContent := "一卡通消费记录: \n"
+
+				for _, v := range lastRte.Obj[0:maxPageSize] {
+					rteContent = rteContent + "\t" + v.GeneraCardConsumeRecordTransactionTime + ": " + v.GeneraCardConsumeRecordTransactionAdress + " " + v.GeneraCardConsumeRecordTransactionType + " " + v.GeneraCardConsumeRecordTransactionMoney + " 元\n"
+				}
+
+				OPQ.Send(OPQBot.SendMsgPack{
+					SendToType: OPQBot.SendToTypeFriend,
+					ToUserUid:  packet.FromUin,
+					Content:    OPQBot.SendTypeTextMsgContent{Content: rteContent},
+				})
+
+				s.Set("pageindex", maxPageSize)
+
+				OPQ.Send(OPQBot.SendMsgPack{
+					SendToType: OPQBot.SendToTypeFriend,
+					ToUserUid:  packet.FromUin,
+					Content:    OPQBot.SendTypeTextMsgContent{Content: "如需要查看更多记录, 请发送 /下一页 或发送其他任意消息停止本次操作!"},
+				})
+
+			} else {
+				rteContent := "一卡通消费记录: \n"
+
+				for _, v := range rte.Obj {
+					rteContent = rteContent + "\t" + v.GeneraCardConsumeRecordTransactionTime + ": " + v.GeneraCardConsumeRecordTransactionAdress + " " + v.GeneraCardConsumeRecordTransactionType + " " + v.GeneraCardConsumeRecordTransactionMoney + " 元\n"
+				}
+
+				OPQ.Send(OPQBot.SendMsgPack{
+					SendToType: OPQBot.SendToTypeFriend,
+					ToUserUid:  packet.FromUin,
+					Content:    OPQBot.SendTypeTextMsgContent{Content: rteContent},
+				})
+			}
+
+		} else {
+
+			if packet.Content != "/下一页" {
+				OPQ.Send(OPQBot.SendMsgPack{
+					SendToType: OPQBot.SendToTypeFriend,
+					ToUserUid:  packet.FromUin,
+					Content:    OPQBot.SendTypeTextMsgContent{Content: "已结束本次操作~"},
+				})
+
+				s.Delete("status")
+				s.Delete("OneCardConsumeRecords")
+				s.Delete("pageindex")
+
+			}
+
+			lastRteIf, _ := s.Get("OneCardConsumeRecords")
+
+			lastRte, ok := lastRteIf.(sec.GetOneCardConsumeRecordsRte)
+			if !ok {
+				return
+			}
+
+			index, _ := s.GetInt("pageindex")
+
+			rteContent := "一卡通消费记录: \n"
+
+			if index+maxPageSize > len(lastRte.Obj) {
+
+				for _, v := range lastRte.Obj[index : len(lastRte.Obj)-1] {
+					rteContent = rteContent + "\t" + v.GeneraCardConsumeRecordTransactionTime + ": " + v.GeneraCardConsumeRecordTransactionAdress + " " + v.GeneraCardConsumeRecordTransactionType + " " + v.GeneraCardConsumeRecordTransactionMoney + " 元\n"
+				}
+
+				OPQ.Send(OPQBot.SendMsgPack{
+					SendToType: OPQBot.SendToTypeFriend,
+					ToUserUid:  packet.FromUin,
+					Content:    OPQBot.SendTypeTextMsgContent{Content: rteContent},
+				})
+
+				OPQ.Send(OPQBot.SendMsgPack{
+					SendToType: OPQBot.SendToTypeFriend,
+					ToUserUid:  packet.FromUin,
+					Content:    OPQBot.SendTypeTextMsgContent{Content: "已无更多结果了哦~"},
+				})
+
+				s.Delete("status")
+				s.Delete("OneCardConsumeRecords")
+				s.Delete("pageindex")
+
+				return
+			}
+
+			for _, v := range lastRte.Obj[index : index+maxPageSize] {
+				rteContent = rteContent + "\t" + v.GeneraCardConsumeRecordTransactionTime + ": " + v.GeneraCardConsumeRecordTransactionAdress + " " + v.GeneraCardConsumeRecordTransactionType + " " + v.GeneraCardConsumeRecordTransactionMoney + " 元\n"
+			}
+
+			OPQ.Send(OPQBot.SendMsgPack{
+				SendToType: OPQBot.SendToTypeFriend,
+				ToUserUid:  packet.FromUin,
+				Content:    OPQBot.SendTypeTextMsgContent{Content: rteContent},
+			})
+
+			s.Set("pageindex", maxPageSize+index)
+
+		}
+
+		return
+
+	}
 }
 
 // 处理群消息
@@ -641,18 +901,26 @@ func handleFriendMsg(botQQ int64, packet *OPQBot.FriendMsgPack) {
 	// 无条件暂停
 	if (packet.Content == "/停止" && status != "") || stopTime >= 2 {
 		s.Delete("status")
-		s.Set("stop_time", 0)
+		s.Delete("step")
+		s.Delete("username")
+		s.Delete("password")
+		s.Delete("sec_user")
+		s.Delete("stop_time")
+		s.Delete("OneCardConsumeRecords")
+		s.Delete("OneCardChargeRecords")
+		s.Delete("pageindex")
 		OPQ.Send(OPQBot.SendMsgPack{
 			SendToType: OPQBot.SendToTypeFriend,
 			ToUserUid:  packet.FromUin,
 			Content:    OPQBot.SendTypeTextMsgContent{Content: "注意: 本次操作已意外中断!"},
 		})
 
+		return
 	}
 
-	if packet.Content == "/菜单" {
+	if strings.Contains(packet.Content, "菜单") || strings.Contains(packet.Content, "帮助") || strings.Contains(packet.Content, "功能") {
 
-		content := "基础功能: \n\t/绑定 - 绑定智慧门户帐号 \n\t/状态 - 查看绑定状态 \n\t/解绑 - 彻底解除绑定 \n\n智慧控电: \n\t/宿舍用电 - 查询当前宿舍剩余用电 \n\t/历史用电 - 查询宿舍历史用电情况 \n\t/历史用电折线图 - 生成每日用电量折线图 \n\t/充电记录 - 查询宿舍电量充值记录 \n\n一卡通: \n\t/一卡通 - 查询卡内余额"
+		content := "基础功能: \n\t/绑定 - 绑定智慧门户帐号 \n\t/状态 - 查看绑定状态 \n\t/解绑 - 彻底解除绑定 \n\n智慧控电: \n\t/宿舍用电 - 查询当前宿舍剩余用电 \n\t/历史用电 - 查询宿舍历史用电情况 \n\t/历史用电折线图 - 生成每日用电量折线图 \n\t/充电记录 - 查询宿舍电量充值记录 \n\n一卡通: \n\t/一卡通 - 查询卡内余额 \n\t/一卡通消费记录 - 查询一卡通历史消费记录 \n\t/充卡记录 - 查询一卡通充值记录"
 
 		OPQ.Send(OPQBot.SendMsgPack{
 			SendToType: OPQBot.SendToTypeFriend,
@@ -666,10 +934,9 @@ func handleFriendMsg(botQQ int64, packet *OPQBot.FriendMsgPack) {
 	// 绑定状态
 	if status == "binding" {
 		UserBindLitSec(s, packet)
-	}
-
-	// 判断用户状态
-	if status == "" {
+	} else if status == "GetOneCardConsumeRecords" || status == "GetOneCardChargeRecords" {
+		UserOneCard(user, s, packet)
+	} else if status == "" {
 
 		if packet.Content == "/绑定" {
 			if user.QQ == 0 {
@@ -753,7 +1020,7 @@ func OPQStart() {
 
 	OPQ.SetSendDelayed(1000)
 	// 设置最大重试次数
-	OPQ.SetMaxRetryCount(5)
+	OPQ.SetMaxRetryCount(500)
 
 	err := OPQ.Start()
 	if err != nil {
@@ -780,6 +1047,8 @@ func OPQStart() {
 		log.Println("连接成功！！！")
 
 		var tmpUin int64
+
+		MemberUinList = []int64{}
 
 		for {
 			gi, err := OPQ.GetGroupMemberList(config.ProConf.QQGroup, tmpUin)

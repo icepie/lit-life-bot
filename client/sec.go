@@ -90,7 +90,7 @@ func SecStart() {
 			}
 		}
 
-		time.Sleep(time.Second * 30)
+		time.Sleep(time.Second * 10)
 	}
 
 	// if secUser.IsLogged() {
