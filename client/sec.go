@@ -15,7 +15,28 @@ import (
 var (
 	// 智慧门户主客户端
 	MySecUser sec.SecUser
+	// 当前学年
+	SchoolYear uint
+	// 当前学期
+	SchoolTerm uint
 )
+
+func refreshSchTime() {
+
+	year, month, _ := time.Now().Date()
+
+	SchoolTerm = 0
+
+	SchoolYear = uint(year)
+
+	for i := 3; i >= 3 && i <= 9; i++ {
+		if month == time.Month(i) {
+			SchoolTerm = 1
+			SchoolYear = uint(year - 1)
+		}
+	}
+
+}
 
 func SecStart() {
 	log.Println("智慧门户测试")
@@ -73,6 +94,10 @@ func SecStart() {
 
 	// 门户登陆
 	MySecUser.PortalLogin()
+
+	refreshSchTime()
+
+	log.Println("当前校历: ", SchoolYear, "学年", "第", SchoolTerm+1, "学期")
 
 	// 保活
 	for {

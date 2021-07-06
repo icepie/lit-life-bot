@@ -854,6 +854,71 @@ func UserOneCard(user model.User, s session.Session, packet *OPQBot.FriendMsgPac
 	}
 }
 
+func UserExam(user model.User, s session.Session, packet *OPQBot.FriendMsgPack) {
+	if packet.Content == "/考试安排" {
+		rte, err := MySecUser.GetExamArrangements(user.StuID, SchoolYear, SchoolTerm)
+
+		if err != nil {
+			log.Println("查询一卡通余额失败: ", err)
+
+			OPQ.Send(OPQBot.SendMsgPack{
+				SendToType: OPQBot.SendToTypeFriend,
+				ToUserUid:  packet.FromUin,
+				Content:    OPQBot.SendTypeTextMsgContent{Content: "错误(请及时反馈): " + err.Error()},
+			})
+
+			return
+		}
+
+		rteContent := "本学期考试安排(仅供参考): \n\n"
+
+		timeLayout := "15:04:05"
+
+		//定义一个正12小时
+		ad, _ := time.ParseDuration("12h")
+
+		for _, v := range rte.Obj {
+
+			var sTimeStr string
+			var eTimeStr string
+
+			// 有些时间录错了...手动修复阴间时间
+			sTime, e := time.Parse(timeLayout, v.ExaminationStartTime)
+			if e != nil {
+				sTimeStr = v.ExaminationStartTime
+			} else {
+				if sTime.Hour() < 8 && sTime.Hour() > 0 {
+					sTimeStr = sTime.Add(ad).Format(timeLayout)
+				} else {
+					sTimeStr = v.ExaminationStartTime
+				}
+			}
+
+			// 有些时间录错了...手动修复阴间时间
+			eTime, e := time.Parse(timeLayout, v.ExaminationEndTime)
+			if e != nil {
+				eTimeStr = v.ExaminationEndTime
+			} else {
+				if eTime.Hour() < 8 && eTime.Hour() > 0 {
+					eTimeStr = eTime.Add(ad).Format(timeLayout)
+				} else {
+					eTimeStr = v.ExaminationEndTime
+				}
+			}
+
+			rteContent = rteContent + "\t\t科目: " + v.ExaminationCourseName + "\n\t\t考试日期: " + v.ExaminationTime + "\n\t\t开始时间: " + sTimeStr + "\n\t\t结束时间: " + eTimeStr + "\n\t\t地点: " + v.ExaminationAdressName + "\n\n"
+		}
+
+		OPQ.Send(OPQBot.SendMsgPack{
+			SendToType: OPQBot.SendToTypeFriend,
+			ToUserUid:  packet.FromUin,
+			Content:    OPQBot.SendTypeTextMsgContent{Content: rteContent},
+		})
+
+	}
+
+}
+
 // 处理群消息
 func handleGroupMsg(botQQ int64, packet *OPQBot.GroupMsgPack) {
 	packet.Next(botQQ, packet)
@@ -920,7 +985,7 @@ func handleFriendMsg(botQQ int64, packet *OPQBot.FriendMsgPack) {
 
 	if strings.Contains(packet.Content, "菜单") || strings.Contains(packet.Content, "帮助") || strings.Contains(packet.Content, "功能") {
 
-		content := "基础功能: \n\t/绑定 - 绑定智慧门户帐号 \n\t/状态 - 查看绑定状态 \n\t/解绑 - 彻底解除绑定 \n\n智慧控电: \n\t/宿舍用电 - 查询当前宿舍剩余用电 \n\t/历史用电 - 查询宿舍历史用电情况 \n\t/历史用电折线图 - 生成每日用电量折线图 \n\t/充电记录 - 查询宿舍电量充值记录 \n\n一卡通: \n\t/一卡通 - 查询卡内余额 \n\t/一卡通消费记录 - 查询一卡通历史消费记录 \n\t/充卡记录 - 查询一卡通充值记录"
+		content := "基础功能: \n\t/绑定 - 绑定智慧门户帐号 \n\t/状态 - 查看绑定状态 \n\t/解绑 - 彻底解除绑定 \n\n智慧控电: \n\t/宿舍用电 - 查询当前宿舍剩余用电 \n\t/历史用电 - 查询宿舍历史用电情况 \n\t/历史用电折线图 - 生成每日用电量折线图 \n\t/充电记录 - 查询宿舍电量充值记录 \n\n一卡通: \n\t/一卡通 - 查询卡内余额 \n\t/一卡通消费记录 - 查询一卡通历史消费记录 \n\t/充卡记录 - 查询一卡通充值记录 \n\n考试相关: \n\t/考试安排 - 查询本学期考试安排 "
 
 		OPQ.Send(OPQBot.SendMsgPack{
 			SendToType: OPQBot.SendToTypeFriend,
@@ -1003,8 +1068,10 @@ func handleFriendMsg(botQQ int64, packet *OPQBot.FriendMsgPack) {
 
 			} else if packet.Content == "/宿舍用电" || packet.Content == "/历史用电" || packet.Content == "/充电记录" || packet.Content == "/历史用电折线图" {
 				UserZhyd(user, s, packet)
-			} else if packet.Content == "/一卡通" || packet.Content == "/一卡通消费记录" || packet.Content == "/充电记录" || packet.Content == "/充卡记录" {
+			} else if packet.Content == "/一卡通" || packet.Content == "/一卡通消费记录" || packet.Content == "/充卡记录" {
 				UserOneCard(user, s, packet)
+			} else if packet.Content == "/考试安排" {
+				UserExam(user, s, packet)
 			}
 		}
 	}
