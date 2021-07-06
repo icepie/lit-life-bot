@@ -11,14 +11,21 @@ import (
 var ProConf = new(Config)
 
 type Config struct {
+	QQGroup int64
 	OPQ     OPQConfig
 	MySQL   MySQLConfig
-	QQGroup int64
+	Sec     SecConfig
 }
 
+// OPQConfig 机器人配置
 type OPQConfig struct {
 	Url string
 	QQ  int64
+}
+
+type SecConfig struct {
+	Username string
+	Password string
 }
 
 // MySQLConfig 关系数据库配置

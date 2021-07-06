@@ -338,7 +338,7 @@ func UserBindLitSec(s session.Session, packet *OPQBot.FriendMsgPack) error {
 
 }
 
-// 用户使用 智慧用电相关
+// 用户智慧用电相关
 func UserZhyd(user model.User, s session.Session, packet *OPQBot.FriendMsgPack) {
 
 	zhydUser, err := zhyd.NewZhydUser(user.StuID, user.SecPassword)
@@ -529,6 +529,71 @@ func UserZhyd(user model.User, s session.Session, packet *OPQBot.FriendMsgPack) 
 	}
 }
 
+// 用户一卡通相关
+func UserOneCard(user model.User, s session.Session, packet *OPQBot.FriendMsgPack) {
+	if packet.Content == "/一卡通" {
+
+		OPQ.Send(OPQBot.SendMsgPack{
+			SendToType: OPQBot.SendToTypeFriend,
+			ToUserUid:  packet.FromUin,
+			Content:    OPQBot.SendTypeTextMsgContent{Content: "正在查询...请稍后!"},
+		})
+
+		rte, err := MySecUser.GetOneCardBalance(user.StuID)
+
+		if err != nil {
+			log.Println("查询一卡通余额失败: ", err)
+
+			OPQ.Send(OPQBot.SendMsgPack{
+				SendToType: OPQBot.SendToTypeFriend,
+				ToUserUid:  packet.FromUin,
+				Content:    OPQBot.SendTypeTextMsgContent{Content: "错误(请及时反馈): " + err.Error()},
+			})
+
+			return
+		}
+
+		rteContent := fmt.Sprintf("一卡通: \n\t 余额: %v 元 \n\t 本月消费: %v 元 \n\t 上月消费: %v 元", rte.Obj.Balance, rte.Obj.ThisMonthMoney, rte.Obj.LastMonthMoney)
+
+		OPQ.Send(OPQBot.SendMsgPack{
+			SendToType: OPQBot.SendToTypeFriend,
+			ToUserUid:  packet.FromUin,
+			Content:    OPQBot.SendTypeTextMsgContent{Content: rteContent},
+		})
+
+	} // else if packet.Content == "/充卡记录" {
+	// 	OPQ.Send(OPQBot.SendMsgPack{
+	// 		SendToType: OPQBot.SendToTypeFriend,
+	// 		ToUserUid:  packet.FromUin,
+	// 		Content:    OPQBot.SendTypeTextMsgContent{Content: "正在查询...请稍后!"},
+	// 	})
+
+	// 	rte, err := MySecUser.GetOneCardChargeRecords(user.StuID, 1, 200)
+	// 	if err != nil {
+	// 		log.Println("查询一卡通消费记录失败: ", err)
+
+	// 		OPQ.Send(OPQBot.SendMsgPack{
+	// 			SendToType: OPQBot.SendToTypeFriend,
+	// 			ToUserUid:  packet.FromUin,
+	// 			Content:    OPQBot.SendTypeTextMsgContent{Content: "错误(请及时反馈): " + err.Error()},
+	// 		})
+
+	// 		return
+	// 	}
+
+	// 	for i, v := range rte.Obj {
+	// 		v.
+	// 	}
+
+	// 	OPQ.Send(OPQBot.SendMsgPack{
+	// 		SendToType: OPQBot.SendToTypeFriend,
+	// 		ToUserUid:  packet.FromUin,
+	// 		Content:    OPQBot.SendTypeTextMsgContent{Content: rteContent},
+	// 	})
+
+	// }
+}
+
 // 处理群消息
 func handleGroupMsg(botQQ int64, packet *OPQBot.GroupMsgPack) {
 	packet.Next(botQQ, packet)
@@ -587,7 +652,7 @@ func handleFriendMsg(botQQ int64, packet *OPQBot.FriendMsgPack) {
 
 	if packet.Content == "/菜单" {
 
-		content := "基础功能: \n\t/绑定 - 绑定智慧门户帐号 \n\t/状态 - 查看绑定状态 \n\t/解绑 - 彻底解除绑定 \n\n智慧控电: \n\t/宿舍用电 - 查询当前宿舍剩余用电 \n\t/历史用电 - 查询宿舍历史用电情况 \n\t/历史用电折线图 - 生成每日用电量折线图 \n\t/充电记录 - 查询宿舍电量充值记录"
+		content := "基础功能: \n\t/绑定 - 绑定智慧门户帐号 \n\t/状态 - 查看绑定状态 \n\t/解绑 - 彻底解除绑定 \n\n智慧控电: \n\t/宿舍用电 - 查询当前宿舍剩余用电 \n\t/历史用电 - 查询宿舍历史用电情况 \n\t/历史用电折线图 - 生成每日用电量折线图 \n\t/充电记录 - 查询宿舍电量充值记录 \n\n一卡通: \n\t/一卡通 - 查询卡内余额"
 
 		OPQ.Send(OPQBot.SendMsgPack{
 			SendToType: OPQBot.SendToTypeFriend,
@@ -671,6 +736,8 @@ func handleFriendMsg(botQQ int64, packet *OPQBot.FriendMsgPack) {
 
 			} else if packet.Content == "/宿舍用电" || packet.Content == "/历史用电" || packet.Content == "/充电记录" || packet.Content == "/历史用电折线图" {
 				UserZhyd(user, s, packet)
+			} else if packet.Content == "/一卡通" || packet.Content == "/一卡通消费记录" || packet.Content == "/充电记录" || packet.Content == "/充卡记录" {
+				UserOneCard(user, s, packet)
 			}
 		}
 	}
@@ -725,8 +792,10 @@ func OPQStart() {
 
 			}
 
-			if len(gi.MemberList) == 250 {
-				tmpUin = gi.MemberList[249].MemberUin
+			maxRteSize := 250
+
+			if len(gi.MemberList) == maxRteSize {
+				tmpUin = gi.MemberList[maxRteSize-1].MemberUin
 			} else {
 				break
 			}

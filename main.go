@@ -10,6 +10,8 @@ func main() {
 
 	model.Database(config.DBMain)
 
+	go client.SecStart()
+
 	client.OPQStart()
 
 }

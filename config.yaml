@@ -1,3 +1,5 @@
+qqGroup: 647027400
+
 opq:
   url: ''
   qq: 1962847213
@@ -7,6 +9,8 @@ mysql:
   port: 29117
   user: 'root'
   pwd: ''
-  db: 'lit'
+  db: ''
 
-qqGroup: 111
+sec:
+  username: ''
+  password: ''
